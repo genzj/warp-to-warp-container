@@ -1,0 +1,13 @@
+# Submodules
+docker-events/
+
+# Legacy scripts
+legacy-scripts/
+
+# Git files
+.git/
+.gitignore
+.gitmodules
+
+# Docker files
+docker-compose.yml
