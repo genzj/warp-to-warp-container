@@ -1,14 +1,14 @@
 ATTACHING_CONTAINER_FILTERS=(
   "io.portainer.agent=true"
-  "info.genzj.warp.attach=true"
+  "info.example.warp.attach=true"
 )
 WARP_CONTAINER_IP_ADDR="192.168.71.200"
 WARP_CONTAINER_NAME="warp-connector"
 WARP_NETWORK_NAME="vm7-warp"
 WARP_PEER_PRIVATE_NETWORKS=(
   "192.168.1.0/24"
-  "192.168.31.0/24"
-  "192.168.61.200"
+  "192.168.2.0/24"
+  "10.0.0.0/24"
 )
 
 # vim: set filetype=zsh

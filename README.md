@@ -53,10 +53,12 @@ Example structure (with sensitive data removed):
     <string>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access</string>
     <key>auth_client_secret</key>
     <string>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</string>
-    <key>unique_client_id</key>
-    <string>your-unique-client-id</string>
+    <key>warp_connector_token</key>
+    <string>your-warp-connector-token-here</string>
 </dict>
 ```
+
+You can use the provided `mdm.xml.example` file as a template.
 
 **Important**: Never commit your actual `mdm.xml` file to version control. Add it to `.gitignore`.
 
@@ -66,7 +68,7 @@ In the Cloudflare Zero Trust dashboard:
 
 1. Go to **Networks** → **Routes**
 2. Add the private network ranges that should be accessible through this connector
-3. Example: `192.168.1.0/24`, `192.168.31.0/24`
+3. Example: `10.0.1.0/24`, `10.0.2.0/24`
 
 ## Installation
 
@@ -87,12 +89,15 @@ git submodule update --init --recursive
 
 ### 2. Prepare MDM Configuration
 
-Place your `mdm.xml` file in the project root:
+Copy the example MDM file and add your credentials:
 
 ```bash
-cp /path/to/your/mdm.xml ./mdm.xml
+cp mdm.xml.example mdm.xml
+# Edit mdm.xml with your actual Cloudflare credentials
 chmod 600 mdm.xml  # Restrict permissions
 ```
+
+Never commit your actual `mdm.xml` file to version control.
 
 ### 3. Create Docker Network
 
@@ -184,7 +189,7 @@ services:
       - NET_ADMIN # Required for route manipulation
     labels:
       # Configure routes via docker-events handler
-      - "docker-events.route=add 192.168.1.0/24 via 192.168.71.200;add 192.168.31.0/24 via 192.168.71.200"
+      - "docker-events.route=add 10.0.1.0/24 via 192.168.71.200;add 10.0.2.0/24 via 192.168.71.200"
     deploy:
       labels:
         - shepherd.autodeploy=false # Optional: disable auto-updates
@@ -215,14 +220,14 @@ Route a single remote network:
 
 ```yaml
 labels:
-  - "docker-events.route=add 192.168.1.0/24 via 192.168.71.200"
+  - "docker-events.route=add 10.0.1.0/24 via 192.168.71.200"
 ```
 
 Route multiple remote networks:
 
 ```yaml
 labels:
-  - "docker-events.route=add 192.168.1.0/24 via 192.168.71.200;add 192.168.31.0/24 via 192.168.71.200;add 10.0.0.0/8 via 192.168.71.200"
+  - "docker-events.route=add 10.0.1.0/24 via 192.168.71.200;add 10.0.2.0/24 via 192.168.71.200;add 10.0.0.0/8 via 192.168.71.200"
 ```
 
 Change the default gateway to route all traffic through WARP:
@@ -257,7 +262,7 @@ CONTAINER_PID=$(docker inspect --format '{{.State.Pid}}' <container-name>)
 sudo nsenter -n -t $CONTAINER_PID ip route show
 
 # Test connectivity to remote network using nsenter
-sudo nsenter -n -t $CONTAINER_PID ping -c 3 192.168.1.1
+sudo nsenter -n -t $CONTAINER_PID ping -c 3 10.0.1.1
 
 # Or combine into one command
 sudo nsenter -n -t $(docker inspect --format '{{.State.Pid}}' <container-name>) ip route show
@@ -324,8 +329,8 @@ sudo nsenter -n -t $(docker inspect --format '{{.State.Pid}}' <container-name>) 
                      ▼
          ┌───────────────────────┐
          │  Remote Site          │
-         │  192.168.1.0/24       │
-         │  192.168.31.0/24      │
+         │  10.0.1.0/24          │
+         │  10.0.2.0/24          │
          └───────────────────────┘
 ```
 

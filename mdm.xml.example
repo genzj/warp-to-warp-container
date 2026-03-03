@@ -1,0 +1,10 @@
+<dict>
+  <key>organization</key>
+  <string>your-organization-name</string>
+  <key>auth_client_id</key>
+  <string>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.access</string>
+  <key>auth_client_secret</key>
+  <string>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</string>
+  <key>warp_connector_token</key>
+  <string>your-warp-connector-token-here</string>
+</dict>

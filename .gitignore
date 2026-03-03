@@ -1,1 +1,6 @@
+# Sensitive MDM configuration files
 *mdm.xml
+!mdm.xml.example
+
+# Environment files
+legacy-scripts/env
