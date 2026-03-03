@@ -1,0 +1,27 @@
+---
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    labels:
+      - "docker-events.route=add 192.168.1.0/24 via 192.168.71.200;add 192.168.31.0/24 via 192.168.71.200"
+    networks:
+      - default
+      - vm7-warp
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      labels:
+        - shepherd.autodeploy=false
+    volumes:
+      - uptime-kuma:/app/data
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - TZ=America/Vancouver
+
+volumes:
+  uptime-kuma:
+
+networks:
+  vm7-warp:
+    external: true
