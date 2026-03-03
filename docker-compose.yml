@@ -1,0 +1,35 @@
+services:
+  warp-connector:
+    image: warpconnectordocker:latest
+    build: .
+    container_name: warp-connector
+    deploy:
+      restart_policy:
+        condition: on-failure
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    volumes:
+      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml
+    cap_add:
+      - NET_ADMIN
+    networks:
+      default:
+
+      vm7-warp:
+        ipv4_address: 192.168.71.200
+
+  dehandler:
+    image: dehandler:latest
+    build: ./docker-events
+    stop_signal: SIGKILL
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+    privileged: true 
+    deploy:
+      restart_policy:
+        condition: any
+
+networks:
+  vm7-warp:
+    external: true

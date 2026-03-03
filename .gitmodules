@@ -1,0 +1,3 @@
+[submodule "docker-events"]
+	path = docker-events
+	url = https://github.com/tonimore/docker-events.git
