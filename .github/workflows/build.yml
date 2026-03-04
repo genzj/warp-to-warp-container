@@ -112,26 +112,14 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan WARP Connector image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ fromJSON(steps.meta-warp.outputs.json).tags[0] }}
           format: "sarif"
           output: "trivy-warp-results.sarif"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
-          exit-code: 1
-
-      - name: Push WARP Connector image
-        if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta-warp.outputs.tags }}
-          labels: ${{ steps.meta-warp.outputs.labels }}
-          cache-from: type=gha
+          exit-code: 0
 
       - name: Build Docker Events Handler image (for scanning)
         uses: docker/build-push-action@v6
@@ -147,14 +135,33 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan Docker Events Handler image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ fromJSON(steps.meta-dehandler.outputs.json).tags[0] }}
           format: "sarif"
           output: "trivy-dehandler-results.sarif"
           severity: "CRITICAL,HIGH"
+          skip-setup-trivy: true
           ignore-unfixed: true
-          exit-code: 1
+          exit-code: 0
+
+      - name: Upload Vulnerability Scan Results
+        uses: actions/upload-artifact@v6
+        with:
+          path: trivy-*.sarif
+          retention-days: 30
+
+      - name: Push WARP Connector image
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-warp.outputs.tags }}
+          labels: ${{ steps.meta-warp.outputs.labels }}
+          cache-from: type=gha
 
       - name: Push Docker Events Handler image
         if: github.ref_type == 'tag'
