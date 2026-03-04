@@ -13,6 +13,7 @@ RUN printf '#!/bin/bash\nwhile true; do sleep 3600; done' > /start.sh && \
 # Update the package list and install necessary tools
 # hadolint ignore=DL3008,DL3009  # will clean list later
 RUN apt-get update && apt-get install --no-install-recommends -y \
+    libgnutls30 \
     curl \
     ca-certificates \
     gpg \
