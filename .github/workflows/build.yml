@@ -98,31 +98,75 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
-      - name: Build and push WARP Connector image
+      - name: Build WARP Connector image (for scanning)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: ${{ github.ref_type == 'tag' }}
+          push: false
+          load: true
           tags: ${{ steps.meta-warp.outputs.tags }}
           labels: ${{ steps.meta-warp.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          load: ${{ github.event_name == 'pull_request' }}
 
-      - name: Build and push Docker Events Handler image
+      - name: Scan WARP Connector image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta-warp.outputs.json).tags[0] }}
+          format: "sarif"
+          output: "trivy-warp-results.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Push WARP Connector image
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-warp.outputs.tags }}
+          labels: ${{ steps.meta-warp.outputs.labels }}
+          cache-from: type=gha
+
+      - name: Build Docker Events Handler image (for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker-events
+          file: ./docker-events/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ steps.meta-dehandler.outputs.tags }}
+          labels: ${{ steps.meta-dehandler.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan Docker Events Handler image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta-dehandler.outputs.json).tags[0] }}
+          format: "sarif"
+          output: "trivy-dehandler-results.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Push Docker Events Handler image
+        if: github.ref_type == 'tag'
         uses: docker/build-push-action@v6
         with:
           context: ./docker-events
           file: ./docker-events/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.ref_type == 'tag' }}
+          push: true
           tags: ${{ steps.meta-dehandler.outputs.tags }}
           labels: ${{ steps.meta-dehandler.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
-          load: ${{ github.event_name == 'pull_request' }}
 
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
