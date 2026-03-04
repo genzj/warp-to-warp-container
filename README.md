@@ -2,6 +2,34 @@
 
 This project provides a Docker-based solution for establishing site-to-site connectivity using Cloudflare WARP connectors. It enables secure routing of traffic between different private networks through Cloudflare's Zero Trust infrastructure.
 
+## Quick Start
+
+Get up and running in 5 minutes using pre-built images:
+
+```bash
+# 1. Clone repository
+git clone --recurse-submodules https://github.com/genzj/warp-to-warp-container.git
+cd warp-to-warp-container
+
+# 2. Configure Cloudflare credentials
+cp mdm.xml.example mdm.xml
+# Edit mdm.xml with your Cloudflare WARP connector credentials
+chmod 600 mdm.xml
+
+# 3. Create Docker network (adjust subnet/name if needed)
+docker network create --driver bridge --attachable --internal --subnet=192.168.71.0/24 vm7-warp
+
+# 4. Start services
+docker compose up -d
+
+# 5. Verify
+docker compose logs -f warp-connector
+```
+
+That's it! The containers will pull pre-built images from GitHub Container Registry and start automatically.
+
+**Note**: If you need different network settings, edit `docker-compose.yml` to change the network name (`vm7-warp`) or IP address (`192.168.71.200`) before step 4.
+
 ## Overview
 
 The solution consists of two main components:
@@ -72,84 +100,27 @@ In the Cloudflare Zero Trust dashboard:
 
 ## Installation
 
-### 1. Clone the Repository
+The Quick Start section above covers the basic installation. For more details:
 
-Clone the repository with submodules:
+### Using Pre-built Images (Recommended)
 
-```bash
-git clone --recurse-submodules <repository-url>
-cd warp-to-warp-standalone
-```
-
-If you've already cloned without submodules, initialize them:
-
-```bash
-git submodule update --init --recursive
-```
-
-### 2. Prepare MDM Configuration
-
-Copy the example MDM file and add your credentials:
-
-```bash
-cp mdm.xml.example mdm.xml
-# Edit mdm.xml with your actual Cloudflare credentials
-chmod 600 mdm.xml  # Restrict permissions
-```
-
-Never commit your actual `mdm.xml` file to version control.
-
-### 3. Create Docker Network
-
-Create the network that will be used for routing traffic through WARP.
-
-#### For Standalone Docker Server
-
-```bash
-docker network create \
-    --driver bridge \
-    --attachable \
-    --internal \
-    --subnet=192.168.71.0/24 \
-    vm7-warp
-```
-
-#### For Docker Swarm
-
-```bash
-docker network create \
-    --driver overlay \
-    --attachable \
-    --internal \
-    --subnet=192.168.71.0/24 \
-    vm7-warp
-```
-
-**Network Configuration**:
-
-- `--driver bridge`: Uses Docker's bridge network driver (standalone mode)
-- `--driver overlay`: Uses Docker's overlay network driver (swarm mode, enables multi-host networking)
-- `--attachable`: Allows manual container attachment and non-swarm containers to connect
-- `--internal`: Prevents external access (optional, remove if external access needed)
-- `--subnet`: Define your internal subnet (adjust as needed)
-- `vm7-warp`: Network name (change to match your environment)
-
-**Note**: In swarm mode, the overlay network allows containers on different nodes to communicate. Ensure the WARP connector and application containers can be scheduled on the same node or configure routing accordingly.
-
-### 4. Start the Stack
-
-Start the services (Docker Compose will automatically build the images):
+The default `docker-compose.yml` uses pre-built images from GitHub Container Registry. Simply run:
 
 ```bash
 docker compose up -d
 ```
 
-Verify the containers are running:
+Images are automatically pulled from `ghcr.io/genzj/warp-to-warp-container`.
+
+### Building Images Locally (Development)
+
+For development or customization, use the development compose file:
 
 ```bash
-docker compose ps
-docker compose logs -f warp-connector
+docker compose -f dev-docker-compose.yml up -d --build
 ```
+
+This builds images locally from source code.
 
 ## Configuration
 
@@ -350,21 +321,33 @@ Customize network settings by modifying `docker-compose.yml`:
 
 ### Manual Image Building (Development)
 
-If you need to manually build images (for development or customization), use these commands:
+If you need to manually build images (for development or customization), you have two options:
 
-Build the WARP connector image:
+#### Option 1: Use the Development Compose File
+
+The `dev-docker-compose.yml` file is configured to build images locally:
 
 ```bash
+docker compose -f dev-docker-compose.yml build
+docker compose -f dev-docker-compose.yml up -d
+```
+
+#### Option 2: Build Images Manually
+
+Build the images directly with Docker:
+
+```bash
+# Build the WARP connector image
 docker build -t warpconnectordocker:latest .
-```
 
-Build the docker-events handler image:
-
-```bash
+# Build the docker-events handler image
 docker build -t dehandler:latest ./docker-events
+
+# Then use the development compose file
+docker compose -f dev-docker-compose.yml up -d
 ```
 
-**Note**: Manual building is optional. Docker Compose automatically builds images when you run `docker compose up` if they don't exist.
+**Note**: For production deployments, use the pre-built images from GitHub Container Registry with the standard `docker-compose.yml` file.
 
 ## Security Considerations
 
