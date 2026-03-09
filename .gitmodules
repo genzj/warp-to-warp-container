@@ -1,3 +1,4 @@
 [submodule "docker-events"]
 	path = docker-events
-	url = https://github.com/tonimore/docker-events.git
+	url = https://github.com/genzj/docker-events.git
+	branch = swarm
