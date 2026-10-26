@@ -29,12 +29,25 @@ jobs:
           dockerfile: Dockerfile
           failure-threshold: warning
 
+  # One job per architecture, each on a native runner, so nothing is emulated.
+  # Images are pushed by digest only; the merge job below turns them into a
+  # single multi-platform manifest list.
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: lint
     permissions:
-      contents: write
+      contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
 
     steps:
       - name: Checkout code
@@ -42,14 +55,188 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only labels and a throwaway local tag are needed here. The release tags
+      # are applied to the manifest list in the merge job.
+      - name: Extract metadata for WARP Connector
+        id: meta-warp
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector
+          tags: |
+            type=raw,value=ci-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.title=Cloudflare WARP Connector
+            org.opencontainers.image.description=Docker-based Cloudflare WARP site-to-site connector
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Extract metadata for Docker Events Handler
+        id: meta-dehandler
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler
+          tags: |
+            type=raw,value=ci-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.title=Docker Events Handler
+            org.opencontainers.image.description=Automatic route configuration for Docker containers
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/docker-events/README.md
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Build WARP Connector image (for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          tags: ${{ steps.meta-warp.outputs.tags }}
+          labels: ${{ steps.meta-warp.outputs.labels }}
+          cache-from: type=gha,scope=warp-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=warp-${{ matrix.arch }}
+
+      - name: Scan WARP Connector image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ fromJSON(steps.meta-warp.outputs.json).tags[0] }}
+          format: "sarif"
+          output: "trivy-warp-${{ matrix.arch }}.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Build Docker Events Handler image (for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker-events
+          file: ./docker-events/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          tags: ${{ steps.meta-dehandler.outputs.tags }}
+          labels: ${{ steps.meta-dehandler.outputs.labels }}
+          cache-from: type=gha,scope=dehandler-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=dehandler-${{ matrix.arch }}
+
+      - name: Scan Docker Events Handler image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ fromJSON(steps.meta-dehandler.outputs.json).tags[0] }}
+          format: "sarif"
+          output: "trivy-dehandler-${{ matrix.arch }}.sarif"
+          severity: "CRITICAL,HIGH"
+          skip-setup-trivy: true
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Upload Vulnerability Scan Results
+        uses: actions/upload-artifact@v6
+        with:
+          name: trivy-${{ matrix.arch }}
+          path: trivy-*.sarif
+          retention-days: 30
+
+      # The layers are already in the cache from the scan builds above, so
+      # these pushes only upload the manifest and any missing blobs.
+      - name: Push WARP Connector image by digest
+        id: push-warp
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta-warp.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=warp-${{ matrix.arch }}
+
+      - name: Push Docker Events Handler image by digest
+        id: push-dehandler
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker-events
+          file: ./docker-events/Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta-dehandler.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=dehandler-${{ matrix.arch }}
+
+      - name: Export digests
+        if: github.ref_type == 'tag'
+        env:
+          WARP_DIGEST: ${{ steps.push-warp.outputs.digest }}
+          DEHANDLER_DIGEST: ${{ steps.push-dehandler.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests/warp /tmp/digests/dehandler
+          touch "/tmp/digests/warp/${WARP_DIGEST#sha256:}"
+          touch "/tmp/digests/dehandler/${DEHANDLER_DIGEST#sha256:}"
+
+      - name: Upload WARP Connector digest
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v6
+        with:
+          name: digests-warp-${{ matrix.arch }}
+          path: /tmp/digests/warp/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Docker Events Handler digest
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v6
+        with:
+          name: digests-dehandler-${{ matrix.arch }}
+          path: /tmp/digests/dehandler/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Stitch the per-architecture digests into one multi-platform manifest list
+  # per image, then cut the release.
+  merge:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Download WARP Connector digests
+        uses: actions/download-artifact@v6
+        with:
+          path: /tmp/digests/warp
+          pattern: digests-warp-*
+          merge-multiple: true
+
+      - name: Download Docker Events Handler digests
+        uses: actions/download-artifact@v6
+        with:
+          path: /tmp/digests/dehandler
+          pattern: digests-dehandler-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -98,91 +285,57 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
-      - name: Build WARP Connector image (for scanning)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: ${{ steps.meta-warp.outputs.tags }}
-          labels: ${{ steps.meta-warp.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create WARP Connector manifest list
+        working-directory: /tmp/digests/warp
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector
+          TAGS: ${{ steps.meta-warp.outputs.tags }}
+          ANNOTATIONS: ${{ steps.meta-warp.outputs.annotations }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=(--tag "$tag")
+          done <<< "$TAGS"
+          while IFS= read -r annotation; do
+            [ -n "$annotation" ] && args+=(--annotation "$annotation")
+          done <<< "$ANNOTATIONS"
+          for digest in *; do
+            args+=("${IMAGE}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${args[@]}"
+          docker buildx imagetools inspect "$(head -n 1 <<< "$TAGS")"
 
-      - name: Scan WARP Connector image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ fromJSON(steps.meta-warp.outputs.json).tags[0] }}
-          format: "sarif"
-          output: "trivy-warp-results.sarif"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: true
-          exit-code: 0
-
-      - name: Build Docker Events Handler image (for scanning)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./docker-events
-          file: ./docker-events/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: ${{ steps.meta-dehandler.outputs.tags }}
-          labels: ${{ steps.meta-dehandler.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Scan Docker Events Handler image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ fromJSON(steps.meta-dehandler.outputs.json).tags[0] }}
-          format: "sarif"
-          output: "trivy-dehandler-results.sarif"
-          severity: "CRITICAL,HIGH"
-          skip-setup-trivy: true
-          ignore-unfixed: true
-          exit-code: 0
-
-      - name: Upload Vulnerability Scan Results
-        uses: actions/upload-artifact@v6
-        with:
-          path: trivy-*.sarif
-          retention-days: 30
-
-      - name: Push WARP Connector image
-        if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta-warp.outputs.tags }}
-          labels: ${{ steps.meta-warp.outputs.labels }}
-          cache-from: type=gha
-
-      - name: Push Docker Events Handler image
-        if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./docker-events
-          file: ./docker-events/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-dehandler.outputs.tags }}
-          labels: ${{ steps.meta-dehandler.outputs.labels }}
-          cache-from: type=gha
+      - name: Create Docker Events Handler manifest list
+        working-directory: /tmp/digests/dehandler
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler
+          TAGS: ${{ steps.meta-dehandler.outputs.tags }}
+          ANNOTATIONS: ${{ steps.meta-dehandler.outputs.annotations }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=(--tag "$tag")
+          done <<< "$TAGS"
+          while IFS= read -r annotation; do
+            [ -n "$annotation" ] && args+=(--annotation "$annotation")
+          done <<< "$ANNOTATIONS"
+          for digest in *; do
+            args+=("${IMAGE}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${args[@]}"
+          docker buildx imagetools inspect "$(head -n 1 <<< "$TAGS")"
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           draft: true
           body: |
             ## Docker Images
+
+            Both images are published as multi-platform manifests for
+            `linux/amd64` and `linux/arm64`, so `docker pull` picks the right
+            architecture automatically.
 
             Pull the images with:
             ```bash
@@ -204,7 +357,7 @@ jobs:
               warp-connector:
                 image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector:${{ github.ref_name }}
                 # ... rest of configuration
-              
+
               dehandler:
                 image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler:${{ github.ref_name }}
                 # ... rest of configuration

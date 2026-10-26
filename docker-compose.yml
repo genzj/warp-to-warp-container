@@ -4,7 +4,6 @@ services:
     # For development with local builds, use dev-docker-compose.yml instead
     image: ghcr.io/genzj/warp-to-warp-container/warp-connector:latest
     container_name: warp-connector
-    platform: linux/amd64
     deploy:
       restart_policy:
         condition: on-failure

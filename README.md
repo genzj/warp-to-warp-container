@@ -321,9 +321,30 @@ Customize network settings by modifying `docker-compose.yml`:
 
 ### Manual Image Building (Development)
 
-If you need to manually build images (for development or customization), you have two options:
+Both published images support `linux/amd64` and `linux/arm64`, so a plain build picks
+your host architecture automatically — that is also the quickest option, since nothing
+is emulated.
 
-#### Option 1: Use the Development Compose File
+If you need to manually build images (for development or customization), you have three options:
+
+#### Option 1: Use the Makefile (recommended)
+
+```bash
+make build          # both images, host architecture only -- the fast path
+make build-warp     # just the WARP connector
+make build-cross    # both images for linux/amd64 and linux/arm64
+make help           # list every target
+```
+
+`make build-cross` (and the single foreign-architecture targets `make build-amd64` /
+`make build-arm64`) emulate the non-native architecture with QEMU and are noticeably
+slower. They need a one-time setup:
+
+```bash
+make binfmt builder
+```
+
+#### Option 2: Use the Development Compose File
 
 The `dev-docker-compose.yml` file is configured to build images locally:
 
@@ -332,7 +353,7 @@ docker compose -f dev-docker-compose.yml build
 docker compose -f dev-docker-compose.yml up -d
 ```
 
-#### Option 2: Build Images Manually
+#### Option 3: Build Images Manually
 
 Build the images directly with Docker:
 
