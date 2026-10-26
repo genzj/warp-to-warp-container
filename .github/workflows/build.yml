@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -51,16 +51,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -70,7 +70,7 @@ jobs:
       # are applied to the manifest list in the merge job.
       - name: Extract metadata for WARP Connector
         id: meta-warp
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector
           tags: |
@@ -86,7 +86,7 @@ jobs:
 
       - name: Extract metadata for Docker Events Handler
         id: meta-dehandler
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler
           tags: |
@@ -101,7 +101,7 @@ jobs:
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Build WARP Connector image (for scanning)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -124,7 +124,7 @@ jobs:
           exit-code: 0
 
       - name: Build Docker Events Handler image (for scanning)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker-events
           file: ./docker-events/Dockerfile
@@ -159,7 +159,7 @@ jobs:
       - name: Push WARP Connector image by digest
         id: push-warp
         if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -171,7 +171,7 @@ jobs:
       - name: Push Docker Events Handler image by digest
         id: push-dehandler
         if: github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker-events
           file: ./docker-events/Dockerfile
@@ -234,10 +234,10 @@ jobs:
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -245,7 +245,7 @@ jobs:
 
       - name: Extract metadata for WARP Connector
         id: meta-warp
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector
           tags: |
@@ -266,7 +266,7 @@ jobs:
 
       - name: Extract metadata for Docker Events Handler
         id: meta-dehandler
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler
           tags: |
