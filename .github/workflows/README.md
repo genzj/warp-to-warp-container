@@ -24,10 +24,32 @@ Unified workflow that handles CI, building, and releases with conditional execut
 
 #### Build Job
 
+- Runs as a matrix with one job per architecture, each on a **native** runner:
+  `ubuntu-latest` for `linux/amd64` and `ubuntu-24.04-arm` for `linux/arm64`. Nothing
+  is emulated, and the two architectures build in parallel.
 - Builds both Docker images (WARP Connector and Docker Events Handler) with proper OCI metadata
+- Each job Trivy-scans the image it just built, so both architectures get scanned
+  (a multi-platform build cannot be loaded into the local image store, so scanning
+  would otherwise only cover amd64)
+- Build cache is scoped per image *and* per architecture (`scope=warp-amd64`, etc.)
+  so the two jobs do not evict each other's layers
 - Conditional behavior based on trigger:
-  - **Pull Requests**: Build only (load locally, no push)
-  - **Tag Push**: Build multi-platform images, push with semantic version tags, create GitHub Release (draft)
+  - **Pull Requests**: Build and scan only (no push)
+  - **Tag Push**: Also push each architecture **by digest** and record the digest as
+    a job artifact for the merge job
+
+> `ubuntu-24.04-arm` runners are free for public repositories. If this repository ever
+> becomes private, that matrix entry needs a paid ARM runner or a fallback to QEMU.
+
+#### Merge Job
+
+Runs only on tag pushes, after both build jobs succeed.
+
+- Downloads the per-architecture digests
+- Combines them into one multi-platform manifest list per image with
+  `docker buildx imagetools create`, applying the semantic version tags and OCI
+  annotations
+- Creates the draft GitHub Release (it has to run here, after the manifests exist)
 
 **Image Tags** (based on trigger):
 
@@ -40,7 +62,8 @@ Unified workflow that handles CI, building, and releases with conditional execut
 - Single source of truth for build configuration
 - Docker layer caching for faster builds
 - OCI image metadata (title, description, source, version, licenses)
-- Multi-platform builds for releases (amd64 for WARP Connector, amd64/arm64 for Docker Events Handler)
+- Multi-platform builds for releases: both images are published as `linux/amd64` +
+  `linux/arm64` manifest lists, built on native runners
 - Automatic GitHub Release creation (draft) with usage instructions
 
 ### 2. Security Scan Workflow (`security-scan.yml`)
@@ -147,8 +170,10 @@ git push origin v1.0.0
 
 This will:
 
-1. Build multi-platform Docker images with version tags
-2. Push to GHCR at `ghcr.io/<owner>/<repo>/warp-connector:v1.0.0` and `ghcr.io/<owner>/<repo>/dehandler:v1.0.0`
+1. Build each image for `linux/amd64` and `linux/arm64` in parallel on native runners
+2. Push each architecture by digest, then merge them into one multi-platform manifest
+   per image at GHCR: `ghcr.io/<owner>/<repo>/warp-connector:v1.0.0` and
+   `ghcr.io/<owner>/<repo>/dehandler:v1.0.0`
 3. Create a draft GitHub Release with auto-generated release notes and usage instructions
 
 ### Using Released Images

@@ -1,5 +1,5 @@
 # Use the latest Ubuntu image as the base
-FROM ubuntu:jammy
+FROM ubuntu:resolute
 
 # Set environment variables to prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -26,7 +26,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
 
 # Add Cloudflare's repository to the sources list
-RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+# TARGETARCH is set automatically by buildx and matches the Debian arch names
+ARG TARGETARCH
+RUN echo "deb [arch=${TARGETARCH} signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/cloudflare-client.list
 
 # Update package list and install Cloudflare WARP
 # hadolint ignore=DL3008  # always use the latest version
