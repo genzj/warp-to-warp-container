@@ -220,14 +220,14 @@ jobs:
 
     steps:
       - name: Download WARP Connector digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests/warp
           pattern: digests-warp-*
           merge-multiple: true
 
       - name: Download Docker Events Handler digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests/dehandler
           pattern: digests-dehandler-*
@@ -246,6 +246,11 @@ jobs:
       - name: Extract metadata for WARP Connector
         id: meta-warp
         uses: docker/metadata-action@v6
+        # `imagetools create` below builds an image index, so it only accepts
+        # `index:`-prefixed annotations. The action defaults to `manifest:`,
+        # which it rejects outright.
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/warp-connector
           tags: |
@@ -263,10 +268,23 @@ jobs:
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.vendor=${{ github.repository_owner }}
+          # Annotations are derived from the repository, not from `labels`, so
+          # they have to be spelled out to avoid an empty description and the
+          # bare repository name as the title. GHCR reads these off the index.
+          annotations: |
+            org.opencontainers.image.title=Cloudflare WARP Connector
+            org.opencontainers.image.description=Docker-based Cloudflare WARP site-to-site connector
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Extract metadata for Docker Events Handler
         id: meta-dehandler
         uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/dehandler
           tags: |
@@ -277,6 +295,14 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
           labels: |
+            org.opencontainers.image.title=Docker Events Handler
+            org.opencontainers.image.description=Automatic route configuration for Docker containers
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/docker-events/README.md
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+          annotations: |
             org.opencontainers.image.title=Docker Events Handler
             org.opencontainers.image.description=Automatic route configuration for Docker containers
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
